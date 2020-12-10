@@ -20,7 +20,7 @@ import java.util.Arrays;
 
 @Path("book")
 @Consumes("application/json")
-public class GoogleResource {
+public class BookResource {
 
     @Inject
     BookService service;
@@ -88,6 +88,9 @@ public class GoogleResource {
             service.delete(libraryCode);
             return Response.status(Response.Status.NO_CONTENT).entity(null).build();
 
+        }catch (EntityNotFoundException e){
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity(new BookResponseDto(null, Arrays.asList(e.getMessage()))).build();
         }catch (DataValidationException e){
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(new BookResponseDto(null, e.getMessages())).build();
@@ -105,9 +108,9 @@ public class GoogleResource {
             return Response.ok()
                     .entity(new BookResponseDto(data, null)).build();
 
-        }catch (DataValidationException e){
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new BookResponseDto(null, e.getMessages())).build();
+        }catch (EntityNotFoundException e){
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity(new BookResponseDto(null, Arrays.asList(e.getMessage()))).build();
         }catch (Exception e){
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                     .entity(new BookResponseDto(null, Arrays.asList(e.getMessage()))).build();

@@ -59,15 +59,15 @@ public class DynamoDBServiceImpl implements DynamoDBService {
     }
 
     @Override
-    public void delete(String libraryCode) throws DynamoDBGeneralException {
-        LOG.infof("[DYNAMO-DELETE] START: %s", libraryCode);
+    public void delete(Book book) throws DynamoDBGeneralException {
+        LOG.infof("[DYNAMO-DELETE] START: %s", book.getLibraryCode());
 
         try {
-            mapper.delete(findByLibraryCode(libraryCode));
-            LOG.infof("[DYNAMO-DELETE] END: %s", libraryCode);
+            mapper.delete(book);
+            LOG.infof("[DYNAMO-DELETE] END: %s", book.getLibraryCode());
 
         }catch (Exception e){
-            LOG.errorf("[DYNAMO-DELETE] Error for %s. MESSAGE: %s ", libraryCode, e.getMessage());
+            LOG.errorf("[DYNAMO-DELETE] Error for %s. MESSAGE: %s ", book.getLibraryCode(), e.getMessage());
             throw new DynamoDBGeneralException(e.getMessage());
         }
     }

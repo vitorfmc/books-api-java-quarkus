@@ -16,8 +16,8 @@ public interface BookService {
 
     Book update(String libraryCode, BookUpdateDTO dto) throws GoogleApiGenericException, DataValidationException, IOException, DynamoDBGeneralException, EntityNotFoundException;
 
-    void delete(String libraryCode) throws DataValidationException, DynamoDBGeneralException;
+    void delete(String libraryCode) throws DataValidationException, DynamoDBGeneralException, EntityNotFoundException;
 
-    Book findByLibraryCode(String findByLibraryCode) throws DataValidationException, DynamoDBGeneralException;
+    Book findByLibraryCode(String findByLibraryCode) throws DataValidationException, DynamoDBGeneralException, EntityNotFoundException;
 
 }

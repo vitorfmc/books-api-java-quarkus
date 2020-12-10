@@ -11,6 +11,18 @@ Parameters:
       - 'hml'
       - 'prd'
     Description: ''
+  BookTableNamePrefix:
+    Type: String
+    Default: "book-table"
+    Description: "Books table name"
+  RCU:
+    Type: Number
+    Description: read capacity unit
+    Default: 5
+  WCU:
+    Type: Number
+    Description: write capacity unit
+    Default: 5
 
 Mappings:
   EnvironmentMap:
@@ -40,6 +52,82 @@ Mappings:
 Resources:
 
   ################################################################################
+  # 0. DYNAMODB                                                                  #
+  ################################################################################
+
+  BookTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${BookTableNamePrefix}-${Stage}"
+      AttributeDefinitions:
+        - AttributeName: libraryCode
+          AttributeType: S
+      KeySchema:
+        - AttributeName: libraryCode
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: !Ref RCU
+        WriteCapacityUnits: !Ref WCU
+      SSESpecification:
+        SSEEnabled: true
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+  #AutoScale - WCU
+  BookTableWriteCapacityScalableTarget:
+    Type: "AWS::ApplicationAutoScaling::ScalableTarget"
+    DependsOn: BookTable
+    Properties:
+      MaxCapacity: 2000
+      MinCapacity: 5
+      ResourceId: !Sub table/${BookTable}
+      RoleARN: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/dynamodb.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_DynamoDBTable
+      ScalableDimension: "dynamodb:table:WriteCapacityUnits"
+      ServiceNamespace: dynamodb
+
+  BookTableWriteScalingPolicy:
+    Type: "AWS::ApplicationAutoScaling::ScalingPolicy"
+    DependsOn: BookTableWriteCapacityScalableTarget
+    Properties:
+      PolicyName: WriteAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: BookTableWriteCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 50
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBWriteCapacityUtilization
+
+  #AutoScale - RCU
+  BookTableReadCapacityScalableTarget:
+    Type: "AWS::ApplicationAutoScaling::ScalableTarget"
+    DependsOn: BookTable
+    Properties:
+      MaxCapacity: 2000
+      MinCapacity: 5
+      ResourceId: !Sub table/${BookTable}
+      RoleARN: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/dynamodb.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_DynamoDBTable
+      ScalableDimension: "dynamodb:table:ReadCapacityUnits"
+      ServiceNamespace: dynamodb
+
+  BookTableReadScalingPolicy:
+    Type: "AWS::ApplicationAutoScaling::ScalingPolicy"
+    DependsOn: BookTableReadCapacityScalableTarget
+    Properties:
+      PolicyName: ReadAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: BookTableReadCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBReadCapacityUtilization
+
+  ################################################################################
   # 1. IAM ROLE FOR LAMBDA                                                       #
   ################################################################################
   BooksAPILambdaRole:
@@ -58,6 +146,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
 
   ################################################################################
   # 2. LAMBDA FUNCTION                                                           #
@@ -80,6 +169,7 @@ Resources:
         Variables:
           DISABLE_SIGNAL_HANDLERS: true
           GOOGLE_API_URL: !FindInMap ['Google', 'URL', !Ref 'Stage']
+          DYNAMODB_BOOK_TABLE: !Sub "${BookTableNamePrefix}-${Stage}"
  #     VpcConfig:
  #       SecurityGroupIds: !Split [',', !FindInMap ['Network', 'securityGroupIds', !Ref 'Stage']]
  #       SubnetIds: !Split [',', !FindInMap ['Network', 'subnetIds', !Ref 'Stage']]
@@ -136,8 +226,6 @@ Resources:
             get:
               summary: Consult book information on Google 
               description: Consult information on a book by title
-              consumes:
-                - application/json
               produces:
                 - application/json
               parameters:
@@ -158,9 +246,126 @@ Resources:
                   default: 0
               responses:
                 '200':
-                  description: '200 response'
+                  description: 'OK'
                   schema:
-                    $ref: "#/definitions/ResponseData"
+                    $ref: "#/definitions/ResponseDataSuccess"
+                '404':
+                  description: 'Book not found'
+                  schema:
+                    $ref: "#/definitions/ResponseDataError"
+              x-amazon-apigateway-integration:
+                uri:
+                  Fn::Sub: 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BooksAPILambdaFunction.Arn}/invocations'
+                responses:
+                  "default":
+                    statusCode: '200'
+                passthroughBehavior: when_no_match
+                httpMethod: POST #always POST
+                contentHandling: "CONVERT_TO_TEXT"
+                type: aws_proxy
+                requestTemplates:
+                  application/json: "{\"failureStatus\" : $input.params('status')\n}"
+            post:
+              summary: Create a Book
+              description: Create a Book
+              consumes:
+                - application/json
+              produces:
+                - application/json
+              parameters:
+                - name: BookCreateRequest
+                  in: body
+                  description: Book create body
+                  schema:
+                    $ref: '#/definitions/BookCreateRequest'
+              responses:
+                '201':
+                  description: 'Created'
+                  schema:
+                    $ref: "#/definitions/ResponseDataSuccess"
+                '400':
+                  description: 'Validation error'
+                  schema:
+                    $ref: "#/definitions/ResponseDataError"
+              x-amazon-apigateway-integration:
+                uri:
+                  Fn::Sub: 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BooksAPILambdaFunction.Arn}/invocations'
+                responses:
+                  "default":
+                    statusCode: '200'
+                passthroughBehavior: when_no_match
+                httpMethod: POST #always POST
+                contentHandling: "CONVERT_TO_TEXT"
+                type: aws_proxy
+                requestTemplates:
+                  application/json: "{\"failureStatus\" : $input.params('status')\n}"
+
+          /book/{libraryCode}:
+            put:
+              summary: Update a Book
+              description: Update a Book
+              consumes:
+                - application/json
+              produces:
+                - application/json
+              parameters:
+                - name: libraryCode
+                  in: path
+                  description: libraryCode - unique identifier
+                  type: string
+                - name: BookUpdateRequest
+                  in: body
+                  description: Book update body
+                  schema:
+                    $ref: '#/definitions/BookUpdateRequest'
+              responses:
+                '200':
+                  description: 'OK'
+                  schema:
+                    $ref: "#/definitions/ResponseDataSuccess"
+                '400':
+                  description: 'Validation error'
+                  schema:
+                    $ref: "#/definitions/ResponseDataError"
+                '404':
+                  description: 'Book not found'
+                  schema:
+                    $ref: "#/definitions/ResponseDataError"
+              x-amazon-apigateway-integration:
+                uri:
+                  Fn::Sub: 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BooksAPILambdaFunction.Arn}/invocations'
+                responses:
+                  "default":
+                    statusCode: '200'
+                passthroughBehavior: when_no_match
+                httpMethod: POST #always POST
+                contentHandling: "CONVERT_TO_TEXT"
+                type: aws_proxy
+                requestTemplates:
+                  application/json: "{\"failureStatus\" : $input.params('status')\n}"
+            delete:
+              summary: Delete a Book
+              description: Delete a Book
+              produces:
+                - application/json
+              parameters:
+                - name: libraryCode
+                  in: path
+                  description: libraryCode - unique identifier
+                  type: string
+              responses:
+                '204':
+                  description: 'OK, but No content'
+                  schema:
+                    $ref: "#/definitions/Empty"
+                '400':
+                  description: 'Validation error'
+                  schema:
+                    $ref: "#/definitions/ResponseDataError"
+                '404':
+                  description: 'Book not found'
+                  schema:
+                    $ref: "#/definitions/ResponseDataError"
               x-amazon-apigateway-integration:
                 uri:
                   Fn::Sub: 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BooksAPILambdaFunction.Arn}/invocations'
@@ -175,7 +380,32 @@ Resources:
                   application/json: "{\"failureStatus\" : $input.params('status')\n}"
 
         definitions:
-          ResponseData:
+          Empty:
+            type: object
+            title: Empty Schema
+
+          BookCreateRequest:
+            properties:
+              title:
+                type: string
+                description: Title
+              libraryCode:
+                type: string
+                description: Library Code
+              catalogingDate:
+                type: string
+                description: Cataloging Date
+
+          BookUpdateRequest:
+            properties:
+              title:
+                type: string
+                description: Title
+              catalogingDate:
+                type: string
+                description: Cataloging Date
+
+          ResponseDataError:
             properties:
               errors:
                 collectionFormat: csv
@@ -185,66 +415,70 @@ Resources:
               requestId:
                 type: string
                 description: Request ID for further investigations
+
+          ResponseDataSuccess:
+            properties:
               data:
-                type: array
-                collectionFormat: csv
-                description: List of Book results
-                items:
-                  type: object
-                  description: Book
-                  properties:
-                    authors:
-                      type: array
-                      collectionFormat: csv
-                      description: Authors
-                      items:
-                        type: string
-                    categories:
-                      type: array
-                      collectionFormat: csv
-                      description: Categories
-                      items:
-                        type: string
-                    description:
-                      type: string
-                      description: Description
-                    pageCount:
-                      type: integer
-                      description: Number of pages in the Book
-                    publishedDate:
-                      type: string
-                      description: PublishDate
-                    publisher:
-                      type: string
-                      description: Publisher
-                    title:
-                      type: string
-                      description: Title
-                    thumbnail:
-                      type: object
-                      description: Book cover image properties
-                      properties:
-                        originalUrl:
-                          type: string
-                          description: Title
-                        base64:
-                          type: string
-                          description: base64 thumbnail of the book cover
-              searchInfo:
                 type: object
-                description: Search info
+                description: Book
                 properties:
-                  limit:
+                  catalogingDate:
+                    type: string
+                    description: Book cataloging date
+                  authors:
+                    type: array
+                    collectionFormat: csv
+                    description: Authors
+                    items:
+                      type: string
+                  categories:
+                    type: array
+                    collectionFormat: csv
+                    description: Categories
+                    items:
+                      type: string
+                  description:
+                    type: string
+                    description: Description
+                  googleTitle:
+                    type: string
+                    description: Title by Google API
+                  libraryCode:
+                    type: string
+                    description: Book library Code
+                  pageCount:
                     type: integer
-                    description: Results amount per page
-                  offset:
-                    type: integer
-                    description: Current page
+                    description: Number of pages in the Book
+                  publishedDate:
+                    type: string
+                    description: PublishDate
+                  publisher:
+                    type: string
+                    description: Publisher
+                  status:
+                    type: string
+                    description: Book Status
+                  title:
+                    type: string
+                    description: Title
+                  thumbnail:
+                    type: object
+                    description: Book cover image properties
+                    properties:
+                      originalUrl:
+                        type: string
+                        description: Title
+                      base64:
+                        type: string
+                        description: base64 thumbnail of the book cover
+              requestId:
+                type: string
+                description: Request ID for further investigations
 
   ################################################################################
   # 5. Permissionamento do Lambda ao API Gateway                                 #
   ################################################################################
-  CallbackLambdaPermission:
+  GetMethodPermission:
     Type: "AWS::Lambda::Permission"
     DependsOn:
       - BooksAPILambdaFunction
@@ -260,6 +494,60 @@ Resources:
         { "Ref": "AWS::AccountId" }, ":",
         !Ref BooksAPIGateway,
         "/*/GET/book"
+      ]
+      ]
+  PostMethodPermission:
+    Type: "AWS::Lambda::Permission"
+    DependsOn:
+      - BooksAPILambdaFunction
+      - BooksAPIGateway
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref BooksAPILambdaFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Join [
+        "", [
+        "arn:aws:execute-api:",
+        { "Ref": "AWS::Region" }, ":",
+        { "Ref": "AWS::AccountId" }, ":",
+        !Ref BooksAPIGateway,
+        "/*/POST/book"
+      ]
+      ]
+  PutMethodPermission:
+    Type: "AWS::Lambda::Permission"
+    DependsOn:
+      - BooksAPILambdaFunction
+      - BooksAPIGateway
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref BooksAPILambdaFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Join [
+        "", [
+        "arn:aws:execute-api:",
+        { "Ref": "AWS::Region" }, ":",
+        { "Ref": "AWS::AccountId" }, ":",
+        !Ref BooksAPIGateway,
+        "/*/PUT/book/{libraryCode}"
+      ]
+      ]
+  DeleteMethodPermission:
+    Type: "AWS::Lambda::Permission"
+    DependsOn:
+      - BooksAPILambdaFunction
+      - BooksAPIGateway
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref BooksAPILambdaFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Join [
+        "", [
+        "arn:aws:execute-api:",
+        { "Ref": "AWS::Region" }, ":",
+        { "Ref": "AWS::AccountId" }, ":",
+        !Ref BooksAPIGateway,
+        "/*/DELETE/book/{libraryCode}"
       ]
       ]
   ################################################################################
@@ -283,7 +571,10 @@ Resources:
     DependsOn:
       - BooksAPIGatewayApiKey
       - BooksAPIGateway
-      - CallbackLambdaPermission
+      - GetMethodPermission
+      - PostMethodPermission
+      - PutMethodPermission
+      - DeleteMethodPermission
       - BooksAPILambdaFunction
     Properties:
       ApiStages:

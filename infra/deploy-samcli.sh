@@ -6,8 +6,6 @@ function die {
     exit 1
 }
 
-echo BUILD BEFORE DEPLOY!
-
 env="$1"
 [ -z "$env" ] && die "Environment $env - cannot be empty. Valid options are dev|hml|prod"
 

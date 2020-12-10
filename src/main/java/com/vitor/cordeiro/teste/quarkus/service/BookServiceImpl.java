@@ -16,10 +16,6 @@ import org.jboss.logging.Logger;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
-import javax.validation.ConstraintViolation;
-import javax.validation.Validation;
-import javax.validation.Validator;
-import javax.validation.ValidatorFactory;
 import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
@@ -48,10 +44,34 @@ public class BookServiceImpl implements BookService {
         Book book;
 
         try{
-            List<String> errors = validate(dto);
-            if(dto.getLibraryCode() != null && dynamoDBService.findByLibraryCode(dto.getLibraryCode()) != null){
+            List<String> errors = new ArrayList<>();
+
+            /*
+                NOTE: CloudEvent is not able to build the ValidatorFactory as it requires a specific bootstrap for native images.
+
+                ValidatorFactory factory= Validation.buildDefaultValidatorFactory();
+                Validator validator=factory.getValidator();
+                List<ConstraintViolation<Object>> violations = new ArrayList<>(validator.validate(obj));
+
+                for(ConstraintViolation<Object> currentError : violations){
+                    errors.add(currentError.getMessage());
+            }*/
+
+            if(dto.getCatalogingDate() == null || dto.getTitle().isEmpty()){
+                errors.add("catalogingDate is mandatory");
+            }else if(!dto.getCatalogingDate().matches("([12]\\d{3}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01]))")){
+                errors.add("catalogingDate format should be: yyyy-MM-dd");
+            }
+
+            if(dto.getTitle() == null || dto.getTitle().isEmpty())
+                errors.add("title is mandatory");
+
+            if(dto.getLibraryCode() == null || dto.getLibraryCode().isEmpty()){
+                errors.add("libraryCode is mandatory");
+            }else if(dynamoDBService.findByLibraryCode(dto.getLibraryCode()) != null){
                 errors.add("book already exists");
             }
+
             if (!errors.isEmpty()) throw new DataValidationException(errors);
 
             var googleResponse = getGoogleResponse(dto.getTitle());
@@ -64,7 +84,7 @@ public class BookServiceImpl implements BookService {
             return book;
 
         }catch (Exception e){
-            LOG.error("[BOOK-SAVE] Error: " + e.getMessage());
+            LOG.error("[BOOK-SAVE] Error: " + e.getMessage(), e);
             throw e;
         }
     }
@@ -78,7 +98,17 @@ public class BookServiceImpl implements BookService {
         Book book;
 
         try{
-            List<String> errors = validate(dto);
+            List<String> errors = new ArrayList<>();
+
+            if(dto.getCatalogingDate() == null || dto.getTitle().isEmpty()){
+                errors.add("catalogingDate is mandatory");
+            }else if(!dto.getCatalogingDate().matches("([12]\\d{3}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01]))")){
+                errors.add("catalogingDate format should be: yyyy-MM-dd");
+            }
+
+            if(dto.getTitle() == null || dto.getTitle().isEmpty())
+                errors.add("title is mandatory");
+
             if (!errors.isEmpty()) throw new DataValidationException(errors);
 
             if (dynamoDBService.findByLibraryCode(libraryCode) == null)
@@ -94,7 +124,7 @@ public class BookServiceImpl implements BookService {
             return book;
 
         }catch (Exception e){
-            LOG.error("[BOOK-UPDATE] Error: " + e.getMessage());
+            LOG.error("[BOOK-UPDATE] Error: " + e.getMessage(), e);
             throw e;
         }
     }
@@ -135,44 +165,34 @@ public class BookServiceImpl implements BookService {
     }
 
     @Override
-    public void delete(String libraryCode) throws DataValidationException, DynamoDBGeneralException {
+    public void delete(String libraryCode) throws DataValidationException, DynamoDBGeneralException, EntityNotFoundException {
 
         LOG.info("[BOOK-DELETE] START");
 
         if(libraryCode == null || libraryCode.trim().isEmpty())
             throw new DataValidationException(Arrays.asList("libraryCode is mandatory"));
 
-        dynamoDBService.delete(libraryCode);
+        Book book = dynamoDBService.findByLibraryCode(libraryCode);
+        if (book == null)
+            throw new EntityNotFoundException("Book not found");
+
+        dynamoDBService.delete(book);
 
         LOG.info("[BOOK-DELETE] END");
     }
 
     @Override
-    public Book findByLibraryCode(String findByLibraryCode) throws DynamoDBGeneralException {
+    public Book findByLibraryCode(String findByLibraryCode) throws DynamoDBGeneralException, EntityNotFoundException {
 
         LOG.info("[BOOK-FIND] START");
 
         var book = dynamoDBService.findByLibraryCode(findByLibraryCode);
         if(book == null)
-            throw new DynamoDBGeneralException("Book not found");
+            throw new EntityNotFoundException("Book not found");
 
         LOG.info("[BOOK-FIND] END");
 
         return book;
     }
 
-    private List<String> validate(Object obj) {
-
-        List<String> errors = new ArrayList<>();
-
-        ValidatorFactory factory= Validation.buildDefaultValidatorFactory();
-        Validator validator=factory.getValidator();
-        List<ConstraintViolation<Object>> violations = new ArrayList<>(validator.validate(obj));
-
-        for(ConstraintViolation<Object> currentError : violations){
-            errors.add(currentError.getMessage());
-        }
-
-        return errors;
-    }
 }
