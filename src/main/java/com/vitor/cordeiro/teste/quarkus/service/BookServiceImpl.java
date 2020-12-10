@@ -74,10 +74,7 @@ public class BookServiceImpl implements BookService {
 
             if (!errors.isEmpty()) throw new DataValidationException(errors);
 
-            var googleResponse = getGoogleResponse(dto.getTitle());
-
-            book = dynamoDBService.save(construct(googleResponse, dto.getLibraryCode(),
-                    dto.getCatalogingDate(), dto.getTitle()));
+            book = dynamoDBService.save(construct(dto.getLibraryCode(), dto.getCatalogingDate(), dto.getTitle()));
 
             LOG.info("[BOOK-SAVE] END");
 
@@ -114,10 +111,7 @@ public class BookServiceImpl implements BookService {
             if (dynamoDBService.findByLibraryCode(libraryCode) == null)
                 throw new EntityNotFoundException("Book not found");
 
-            var googleResponse = getGoogleResponse(dto.getTitle());
-
-            book = dynamoDBService.save(construct(googleResponse, libraryCode,
-                    dto.getCatalogingDate(), dto.getTitle()));
+            book = dynamoDBService.save(construct(libraryCode, dto.getCatalogingDate(), dto.getTitle()));
 
             LOG.info("[BOOK-UPDATE] END");
 
@@ -130,28 +124,46 @@ public class BookServiceImpl implements BookService {
     }
 
 
-    private Book construct(GoogleBooksResponseItem googleResponseItem, String libraryCode, String catalogingDate, String title) throws IOException {
-        OffsetDateTime published = OffsetDateTime.parse(googleResponseItem.getVolumeInfo().getPublishedDate() + "T00:00:00-00:00", DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+    private Book construct(String libraryCode, String catalogingDate, String title) throws IOException, DataValidationException, GoogleApiGenericException {
+
+        var googleResponseItem = getGoogleResponse(title);
+
+        if(googleResponseItem == null || googleResponseItem.getVolumeInfo() == null)
+            throw new GoogleApiGenericException("Unparsable item from Google");
+
+        OffsetDateTime published = null;
+        try{
+            published = OffsetDateTime.parse(googleResponseItem.getVolumeInfo().getPublishedDate() + "T00:00:00-00:00", DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        }catch (Exception e){
+            published = OffsetDateTime.parse("2020-01-01T00:00:00-00:00", DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+            LOG.infof("[BOOK-CONSTRUCT] Could not parse catalogingDate %s from libraryCode %s", catalogingDate, libraryCode);
+        }
 
         OffsetDateTime catalogingDateFormatted = OffsetDateTime.parse(catalogingDate + "T00:00:00-00:00", DateTimeFormatter.ISO_OFFSET_DATE_TIME);
 
-        var image = googleResponseItem.getVolumeInfo().getImageLinks() != null ? new Image(
-                googleResponseItem.getVolumeInfo().getImageLinks().getThumbnail(),
-                "data:image/jpeg;base64," +
-                        ImageUtil.urlToBase64(googleResponseItem.getVolumeInfo().getImageLinks().getThumbnail() + ".jpeg")
-        ) : null;
+        var volumeInfo = googleResponseItem.getVolumeInfo();
+
+        String tumbLink = "NOT_INFORMED";
+        String base64 = "NOT_INFORMED";
+        if(volumeInfo.getImageLinks() != null){
+            tumbLink =  volumeInfo.getImageLinks().getThumbnail();
+            base64 = "data:image/jpeg;base64," +
+                    ImageUtil.urlToBase64(googleResponseItem.getVolumeInfo().getImageLinks().getThumbnail() + ".jpeg");
+        }
+
+        var image = googleResponseItem.getVolumeInfo().getImageLinks() != null ? new Image(tumbLink, base64) : null;
 
         return new Book(libraryCode,
                             BookStatusEnum.NEW,
                             catalogingDateFormatted,
                             title,
-                            googleResponseItem.getVolumeInfo().getTitle(),
-                            googleResponseItem.getVolumeInfo().getAuthors(),
-                            googleResponseItem.getVolumeInfo().getCategories(),
-                            googleResponseItem.getVolumeInfo().getPublisher(),
+                            volumeInfo.getTitle() != null && !volumeInfo.getTitle().isEmpty() ? volumeInfo.getTitle() : "NOT_INFORMED",
+                            !volumeInfo.getAuthors().isEmpty() ? volumeInfo.getAuthors() : Arrays.asList("NOT_INFORMED"),
+                            !volumeInfo.getCategories().isEmpty() ? volumeInfo.getCategories() : Arrays.asList("NOT_INFORMED"),
+                            volumeInfo.getPublisher() != null && !volumeInfo.getPublisher().isEmpty() ? volumeInfo.getPublisher() : "NOT_INFORMED",
                             published,
-                            googleResponseItem.getVolumeInfo().getDescription(),
-                            googleResponseItem.getVolumeInfo().getPageCount(),
+                            volumeInfo.getDescription() != null && !volumeInfo.getDescription().isEmpty() ? volumeInfo.getDescription() : "NOT_INFORMED",
+                            volumeInfo.getPageCount() != null && volumeInfo.getPageCount() > 0 ? volumeInfo.getPageCount() : 0,
                             image);
     }
 

@@ -82,11 +82,12 @@ public class BookResource {
 
     @DELETE
     @Path("/{libraryCode}")
+    @Produces(MediaType.APPLICATION_JSON)
     public Response delete(@PathParam("libraryCode") String libraryCode){
 
         try{
             service.delete(libraryCode);
-            return Response.status(Response.Status.NO_CONTENT).entity(null).build();
+            return Response.noContent().build();
 
         }catch (EntityNotFoundException e){
             return Response.status(Response.Status.NOT_FOUND)
