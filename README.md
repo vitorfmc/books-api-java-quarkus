@@ -1,26 +1,44 @@
-# Google Books Integration API (Java+Quarkus+GraalVM)
+# Google Books Integration API (Java+Quarkus+GraalVM+AWS Cloud)
 
-This a Quarkus study project that integrates with Google Books API.
+**LAST UPDATE:** 12/2020
 
-API Documentation: http://.../swagger-ui/#/
+Follow me: https://www.linkedin.com/in/vitor-cordeiro-921a5697/
+
+---
+
+### 1. Introduction
+
+This project main objective is provide a [CRUD](https://en.wikipedia.org/wiki/Create,_read,_update_and_delete) API service that integrates with [Google Books API](https://developers.google.com/books/docs/v1/using) to generate search data for study purposes.
+
+---
+
+### 2. How it works
 
 
-## 1. Technologies
+The application works as a rest-api, which stores data from a book in a DynamoDB.
+The integration with Google takes place at the moment of persistence, in which the application searches for additional information on Google to popularize the Book entity.
+
+![Integration Diagram](https://raw.githubusercontent.com/vitorfmc/books-api-java-quarkus/master/help/integrations_chart.png)
+
+
+## 3. Technologies
 
 * Quakus Framework (https://quarkus.io/);
 * GraalVM;
-* Java 11;
+* Swagger;
+* Java 11 (Amazon Distribution);
+* AWS: Api Gateway, Lambda, DynamoDB;
 
-## 2. Executing and Deploying
+## 4. Executing and Deploying
 
-#### 2.1 Running the application in dev mode
+#### 4.1 Running the application in dev mode
 
 You can run your application in dev mode that enables live coding using:
 ```shell script
 ./gradlew quarkusDev
 ```
 
-#### 2.2 Packaging and running the application
+#### 4.2 Packaging and running the application
 
 The application can be packaged using:
 ```shell script
@@ -36,7 +54,7 @@ If you want to build an _über-jar_, execute the following command:
 
 The application is now runnable using `java -jar build/quarkus-google-books-integration-api-1.0.0-SNAPSHOT-runner.jar`.
 
-#### 2.3 Send to AWS
+#### 4.3 Send to AWS
 
 To deploy the application throw cloudformation, use the script: 
 ```shell script
@@ -52,5 +70,54 @@ You can then execute your native executable with: `./build/quarkus-google-books-
 
 If you want to learn more about building native executables, please consult https://quarkus.io/guides/gradle-tooling.
 
-## 3. Reference
+
+## 5. Documentation so far
+
+**5.1 Google books:** 
+https://developers.google.com/books/docs/v1/using (Last Visit: 02/12/2020)
+
+**5.2 Postman requests (Import and use in Postman):** 
+[post_man.json](https://raw.githubusercontent.com/vitorfmc/books-api-java-quarkus/master/help/postman_collection.json)
+
+**5.3 API Documentation:**
+
+NOTE: If you are running the API, you can access the documentation using the path: http://.../swagger-ui/
+
+POST::
+```
+curl --location --request POST 'http://localhost:8080/book' \
+--header 'Content-Type: application/json' \
+--header 'x-api-key: {{x-api-key}}' \
+--data-raw '{
+    "title":{{title}},
+    "libraryCode":{{libraryCode}},
+    "catalogingDate":"2020-11-01"
+}'
+```
+
+PUT:
+```
+curl --location --request PUT 'http://localhost:8080/book/test' \
+--header 'Content-Type: application/json' \
+--header 'x-api-key: {{x-api-key}}' \
+--data-raw '{
+    "title":"Malorie",
+    "catalogingDate":"2020-11-01"
+}'
+```
+
+GET:
+```
+curl --location -g --request GET 'http://localhost:8080/book?libraryCode={{libraryCode}}' \
+--header 'x-api-key: {{x-api-key}}'
+```
+
+DELETE:
+```
+curl --location -g --request DELETE 'http://localhost:8080/book/{{libraryCode}}' \
+--header 'x-api-key: {{x-api-key}}'
+```
+
+
+## 6. References:
 * Reference for studies: https://quarkus.io/guides/
