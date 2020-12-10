@@ -77,11 +77,11 @@ If you want to learn more about building native executables, please consult http
 https://developers.google.com/books/docs/v1/using (Last Visit: 02/12/2020)
 
 **5.2 Postman requests (Import and use in Postman):** 
-[post_man.json](https://raw.githubusercontent.com/vitorfmc/books-api-java-quarkus/master/help/postman_collection.json)
+[postman_collection.json](https://raw.githubusercontent.com/vitorfmc/books-api-java-quarkus/master/help/postman_collection.json)
 
 **5.3 API Documentation:**
 
-NOTE: If you are running the API, you can access the documentation using the path: http://.../swagger-ui/
+**NOTE:** If you are running the API, you can access the documentation using the path: **${APPLICATION_DOMAIN}**/swagger-ui/
 
 POST::
 ```
