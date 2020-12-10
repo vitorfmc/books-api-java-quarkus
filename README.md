@@ -18,7 +18,7 @@ This project main objective is provide a [CRUD](https://en.wikipedia.org/wiki/Cr
 The application works as a rest-api, which stores data from a book in a DynamoDB.
 The integration with Google takes place at the moment of persistence, in which the application searches for additional information on Google to popularize the Book entity.
 
-![Integration Diagram](https://raw.githubusercontent.com/vitorfmc/books-api-java-quarkus/master/help/integrations_chart.png)
+![Integration Diagram](https://raw.githubusercontent.com/vitorfmc/books-api-java-quarkus/master/help/diagram_001.jpg)
 
 
 ## 3. Technologies
