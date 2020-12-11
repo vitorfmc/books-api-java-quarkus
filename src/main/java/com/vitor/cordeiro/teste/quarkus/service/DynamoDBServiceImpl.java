@@ -42,6 +42,11 @@ public class DynamoDBServiceImpl implements DynamoDBService {
                 .build();
     }
 
+    public void setClient(AmazonDynamoDB client) {
+        this.client = client;
+        mapper = new DynamoDBMapper(client);
+    }
+
     @Override
     public Book save(Book book) throws DynamoDBGeneralException {
 
