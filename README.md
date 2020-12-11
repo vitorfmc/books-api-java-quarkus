@@ -118,6 +118,9 @@ curl --location -g --request DELETE 'http://localhost:8080/book/{{libraryCode}}'
 --header 'x-api-key: {{x-api-key}}'
 ```
 
+## 6. TO DO:
 
-## 6. References:
+* Missing some unit and integration tests.
+
+## 7. References:
 * Reference for studies: https://quarkus.io/guides/

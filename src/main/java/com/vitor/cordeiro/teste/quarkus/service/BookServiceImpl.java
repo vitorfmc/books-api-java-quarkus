@@ -16,7 +16,6 @@ import org.jboss.logging.Logger;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
-import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -37,7 +36,7 @@ public class BookServiceImpl implements BookService {
 
     @Override
     public Book save(BookCreateDTO dto)
-            throws GoogleApiGenericException, DataValidationException, IOException, DynamoDBGeneralException {
+            throws GoogleApiGenericException, DataValidationException, DynamoDBGeneralException {
 
         LOG.info("[BOOK-SAVE] START");
 
@@ -88,7 +87,7 @@ public class BookServiceImpl implements BookService {
 
     @Override
     public Book update(String libraryCode, BookUpdateDTO dto)
-            throws GoogleApiGenericException, DataValidationException, IOException, DynamoDBGeneralException, EntityNotFoundException {
+            throws GoogleApiGenericException, DataValidationException, DynamoDBGeneralException, EntityNotFoundException {
 
         LOG.info("[BOOK-UPDATE] START");
 
@@ -124,47 +123,53 @@ public class BookServiceImpl implements BookService {
     }
 
 
-    private Book construct(String libraryCode, String catalogingDate, String title) throws IOException, DataValidationException, GoogleApiGenericException {
+    private Book construct(String libraryCode, String catalogingDate, String title) throws GoogleApiGenericException {
 
-        var googleResponseItem = getGoogleResponse(title);
-
-        if(googleResponseItem == null || googleResponseItem.getVolumeInfo() == null)
-            throw new GoogleApiGenericException("Unparsable item from Google");
-
-        OffsetDateTime published = null;
         try{
-            published = OffsetDateTime.parse(googleResponseItem.getVolumeInfo().getPublishedDate() + "T00:00:00-00:00", DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+            var googleResponseItem = getGoogleResponse(title);
+
+            if(googleResponseItem == null || googleResponseItem.getVolumeInfo() == null)
+                throw new GoogleApiGenericException("Empty volume info");
+
+            OffsetDateTime published = null;
+            try{
+                published = OffsetDateTime.parse(googleResponseItem.getVolumeInfo().getPublishedDate() + "T00:00:00-00:00", DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+            }catch (Exception e){
+                published = OffsetDateTime.parse("2020-01-01T00:00:00-00:00", DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+                LOG.infof("[BOOK-CONSTRUCT] Could not parse catalogingDate %s from libraryCode %s", catalogingDate, libraryCode);
+            }
+
+            OffsetDateTime catalogingDateFormatted = OffsetDateTime.parse(catalogingDate + "T00:00:00-00:00", DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+
+            var volumeInfo = googleResponseItem.getVolumeInfo();
+
+            String tumbLink = "NOT_INFORMED";
+            String base64 = "NOT_INFORMED";
+            if(volumeInfo.getImageLinks() != null){
+                tumbLink =  volumeInfo.getImageLinks().getThumbnail();
+                base64 = "data:image/jpeg;base64," +
+                        ImageUtil.urlToBase64(googleResponseItem.getVolumeInfo().getImageLinks().getThumbnail() + ".jpeg");
+            }
+
+            var image = googleResponseItem.getVolumeInfo().getImageLinks() != null ? new Image(tumbLink, base64) : null;
+
+            return new Book(libraryCode,
+                    BookStatusEnum.NEW,
+                    catalogingDateFormatted,
+                    title,
+                    volumeInfo.getTitle() != null && !volumeInfo.getTitle().isEmpty() ? volumeInfo.getTitle() : "NOT_INFORMED",
+                    volumeInfo.getAuthors() != null && !volumeInfo.getAuthors().isEmpty() ? volumeInfo.getAuthors() : Arrays.asList("NOT_INFORMED"),
+                    volumeInfo.getCategories() != null && !volumeInfo.getCategories().isEmpty() ? volumeInfo.getCategories() : Arrays.asList("NOT_INFORMED"),
+                    volumeInfo.getPublisher() != null && !volumeInfo.getPublisher().isEmpty() ? volumeInfo.getPublisher() : "NOT_INFORMED",
+                    published,
+                    volumeInfo.getDescription() != null && !volumeInfo.getDescription().isEmpty() ? volumeInfo.getDescription() : "NOT_INFORMED",
+                    volumeInfo.getPageCount() != null && volumeInfo.getPageCount() > 0 ? volumeInfo.getPageCount() : 0,
+                    image);
+
         }catch (Exception e){
-            published = OffsetDateTime.parse("2020-01-01T00:00:00-00:00", DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-            LOG.infof("[BOOK-CONSTRUCT] Could not parse catalogingDate %s from libraryCode %s", catalogingDate, libraryCode);
+            LOG.error("[BOOK-CONSTRUCT] Error: " + e.getMessage(), e);
+            throw new GoogleApiGenericException("Unparsable item from Google");
         }
-
-        OffsetDateTime catalogingDateFormatted = OffsetDateTime.parse(catalogingDate + "T00:00:00-00:00", DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-
-        var volumeInfo = googleResponseItem.getVolumeInfo();
-
-        String tumbLink = "NOT_INFORMED";
-        String base64 = "NOT_INFORMED";
-        if(volumeInfo.getImageLinks() != null){
-            tumbLink =  volumeInfo.getImageLinks().getThumbnail();
-            base64 = "data:image/jpeg;base64," +
-                    ImageUtil.urlToBase64(googleResponseItem.getVolumeInfo().getImageLinks().getThumbnail() + ".jpeg");
-        }
-
-        var image = googleResponseItem.getVolumeInfo().getImageLinks() != null ? new Image(tumbLink, base64) : null;
-
-        return new Book(libraryCode,
-                            BookStatusEnum.NEW,
-                            catalogingDateFormatted,
-                            title,
-                            volumeInfo.getTitle() != null && !volumeInfo.getTitle().isEmpty() ? volumeInfo.getTitle() : "NOT_INFORMED",
-                            !volumeInfo.getAuthors().isEmpty() ? volumeInfo.getAuthors() : Arrays.asList("NOT_INFORMED"),
-                            !volumeInfo.getCategories().isEmpty() ? volumeInfo.getCategories() : Arrays.asList("NOT_INFORMED"),
-                            volumeInfo.getPublisher() != null && !volumeInfo.getPublisher().isEmpty() ? volumeInfo.getPublisher() : "NOT_INFORMED",
-                            published,
-                            volumeInfo.getDescription() != null && !volumeInfo.getDescription().isEmpty() ? volumeInfo.getDescription() : "NOT_INFORMED",
-                            volumeInfo.getPageCount() != null && volumeInfo.getPageCount() > 0 ? volumeInfo.getPageCount() : 0,
-                            image);
     }
 
     private GoogleBooksResponseItem getGoogleResponse(String title) throws GoogleApiGenericException, DataValidationException {

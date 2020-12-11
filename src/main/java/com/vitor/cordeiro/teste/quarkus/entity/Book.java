@@ -7,6 +7,7 @@ import io.quarkus.runtime.annotations.RegisterForReflection;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Objects;
 
 @RegisterForReflection
 @DynamoDBTable(tableName = "teste-quarkus-book")
@@ -165,5 +166,18 @@ public class Book {
 
     public void setGoogleTitle(String googleTitle) {
         this.googleTitle = googleTitle;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Book book = (Book) o;
+        return Objects.equals(libraryCode, book.libraryCode);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(libraryCode);
     }
 }

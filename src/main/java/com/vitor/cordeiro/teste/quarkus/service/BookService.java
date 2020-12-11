@@ -12,9 +12,9 @@ import java.io.IOException;
 
 public interface BookService {
 
-    Book save(BookCreateDTO dto) throws GoogleApiGenericException, DataValidationException, IOException, DynamoDBGeneralException;
+    Book save(BookCreateDTO dto) throws GoogleApiGenericException, DataValidationException, DynamoDBGeneralException;
 
-    Book update(String libraryCode, BookUpdateDTO dto) throws GoogleApiGenericException, DataValidationException, IOException, DynamoDBGeneralException, EntityNotFoundException;
+    Book update(String libraryCode, BookUpdateDTO dto) throws GoogleApiGenericException, DataValidationException, DynamoDBGeneralException, EntityNotFoundException;
 
     void delete(String libraryCode) throws DataValidationException, DynamoDBGeneralException, EntityNotFoundException;
 

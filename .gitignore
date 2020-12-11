@@ -7,6 +7,7 @@ build/
 .settings/
 bin/
 infra/deploy-output.yaml
+out/
 
 # IntelliJ
 .idea
