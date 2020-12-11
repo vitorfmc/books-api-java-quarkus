@@ -23,7 +23,7 @@ import java.util.ArrayList;
 @QuarkusTest
 public class DynamoDBServiceIntegrationTest {
 
-    private static final Logger LOG = Logger.getLogger(DynamoDBServiceIntegrationTest.class);
+    /*private static final Logger LOG = Logger.getLogger(DynamoDBServiceIntegrationTest.class);
 
     private static final String DYNAMODB_TABLE_NAME = "TEST-TABLE";
     private AmazonDynamoDB dynamoDBClient;
@@ -91,6 +91,6 @@ public class DynamoDBServiceIntegrationTest {
         var resp = dynamoDBService.findByLibraryCode(name);
 
         Assertions.assertEquals(resp.getLibraryCode(), book.getLibraryCode());
-    }
+    }*/
 
 }
