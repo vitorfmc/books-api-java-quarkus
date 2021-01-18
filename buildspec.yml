@@ -8,7 +8,7 @@ phases:
   build:
     commands:
       - echo Build started on `date`
-      - gradle clean build -x test -Dquarkus.package.type=native --info
+      - ./gradlew clean build -x test -Dquarkus.package.type=native --info
 artifacts:
   type: zip
   files:
