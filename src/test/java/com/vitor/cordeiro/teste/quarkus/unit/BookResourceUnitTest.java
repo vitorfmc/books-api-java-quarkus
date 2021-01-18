@@ -45,7 +45,7 @@ class BookResourceUnitTest {
                     .body("requestId", notNullValue())
                     .body("errors", nullValue())
                     .body("data.libraryCode", is(book.getLibraryCode()))
-                    .statusCode(400);
+                    .statusCode(201);
     }
 
     /**
